@@ -10,6 +10,7 @@ from nltk.cluster.kmeans import KMeansClusterer
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score as sil_score, f1_score, homogeneity_score
 import timeit
+from matplotlib.ticker import MaxNLocator
 from rdkit.Chem import AllChem
 from rdkit import Chem
 data_folder_path = '/Users/lijiali/Desktop/Active leanring Framework/data/labelled_mol_data'
@@ -62,6 +63,14 @@ x = x.to_numpy()
 y = y.to_numpy()
 
 def run_kmeans(X, y, title):
+    '''
+
+    :param X: features of data
+    :param y: labels of data actually not useful when regression
+    :param title: the title of the figure, mainly to be which round for what kind of molecules
+    :return: None, will reture the Silhouette Score Plot
+    '''
+
     kclusters = list(np.arange(2, 20, 1))
     sil_scores = []
     homo_scores = []
@@ -69,12 +78,12 @@ def run_kmeans(X, y, title):
 
     for k in kclusters:
         start_time = timeit.default_timer()
-        km = KMeansClusterer(k, distance=nltk.cluster.util.cosine_distance, repeats=10)
+        km = KMeansClusterer(k, distance=nltk.cluster.util.cosine_distance, repeats=3)
         assigned_clusters = km.cluster(x, assign_clusters=True)
         end_time = timeit.default_timer()
         train_times.append(end_time - start_time)
         sil_scores.append(sil_score(X, assigned_clusters))
-        homo_scores.append(homogeneity_score(y, assigned_clusters))
+        # homo_scores.append(homogeneity_score(y, assigned_clusters))
 
     # elbow curve for silhouette score
     plt.plot(list(map(int, kclusters)), sil_scores)
@@ -88,14 +97,14 @@ def run_kmeans(X, y, title):
 
 
     # plot homogeneity scores
-    plt.plot(list(map(int, kclusters)), homo_scores)
-    plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.grid(True)
-    plt.xlabel('No. Clusters')
-    plt.ylabel('Homogeneity Score')
-    plt.title('Homogeneity Scores KMeans: ' + title)
-    plt.savefig(figure_save_folder+'Homogeneity Scores KMeans: ' + title + '.png')
-    plt.clf()
+    # plt.plot(list(map(int, kclusters)), homo_scores)
+    # plt.gca().xaxis.set_major_locator(MaxNLocator(integer=True))
+    # plt.grid(True)
+    # plt.xlabel('No. Clusters')
+    # plt.ylabel('Homogeneity Score')
+    # plt.title('Homogeneity Scores KMeans: ' + title)
+    # plt.savefig(figure_save_folder+'Homogeneity Scores KMeans: ' + title + '.png')
+    # plt.clf()
 
 run_kmeans(x,y, 'round8')
 
