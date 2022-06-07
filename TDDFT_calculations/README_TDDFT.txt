@@ -23,6 +23,7 @@ tqdm
 
 6. Change the ephemdir directory in all 3 TDDFT_from_SMILES* files (either in the python file itself or as an input argument in-line). This will be where all the calculations are done so make sure there is enough storage in this location.
 
+7. Do chmod u+x g092xyz.pl and chmod u+x xtb to make sure both are executable.
 
 How to Run
 
