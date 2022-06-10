@@ -39,3 +39,6 @@ For future runs, you can leave out the --create_dir keyword to save some time.
 3. Compile results with:
 
 python TDDFT_from_SMILES_compile.py --smiles_path test.csv
+
+4. This will create a file called TDDFT_test.csv - check test results against TDDFT_test_result.csv to ensure everything ran correctly.
+
