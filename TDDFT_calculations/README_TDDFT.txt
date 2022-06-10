@@ -21,15 +21,18 @@ tqdm
 
 5. Check the mem and cpu requirements in the job script. The Gaussian script is set to run on 100GB memory and 40 cpus. If that configuration is unavailable on your cluster, you will need to edit those values in both the job script (gaussian mem + 25 gb) AND the TDDFT_from_SMILES.py file (lines 390 and 391)
 
-6. Change the ephemdir directory in all 3 TDDFT_from_SMILES* files (either in the python file itself or as an input argument in-line). This will be where all the calculations are done so make sure there is enough storage in this location.
+6. Check the other lines in the job script including partition choice (with -p), module loading, and conda environment activation. Change them to the desired values.
 
-7. Do chmod u+x g092xyz.pl and chmod u+x xtb to make sure both are executable.
+7. Change the ephemdir directory in all 3 TDDFT_from_SMILES* files (either in the python file itself in the SimpleArgParse class, or as an input argument in-line). This will be where all the calculations are done so make sure there is enough storage in this location.
+
 
 How to Run
 
 1. Run the setup script. This will create all the directories and submit the job array to SLURM. For example:
 
-python TDDFT_from_SMILES_setup.py --smiles_path test.csv
+python TDDFT_from_SMILES_setup.py --smiles_path test.csv --create_dir
+
+For future runs, you can leave out the --create_dir keyword to save some time.
 
 2. Wait for calculations to complete. Check the job queue for progress.
 

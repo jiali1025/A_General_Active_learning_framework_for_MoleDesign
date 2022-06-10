@@ -34,7 +34,7 @@ def compile_data():
         IDstr = 'ID' + '%09d' % ID
         IDdir = os.path.join(xyzdir, IDstr)
         filename = IDstr
-        print(os.path.join(xyzdir, filename, 'excitedstate_S1.out'))
+        # print(os.path.join(xyzdir, filename, 'excitedstate_S1.out'))
         if os.path.isfile(os.path.join(xyzdir, filename, 'excitedstate_S1.out')) and \
                 os.path.isfile(os.path.join(xyzdir, filename, 'excitedstate_T1.out')):
             with open(os.path.join(xyzdir, filename, 'excitedstate_S1.out'), 'r') as file:

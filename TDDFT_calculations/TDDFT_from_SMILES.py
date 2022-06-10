@@ -271,6 +271,12 @@ def run_T1_TDDFT(filename):
 
 # compile results
 def extract_data(filename):
+    os.system('(cd ' + os.path.join(xyzdir, filename) +
+                  " && find . -name 'gauss_*.chk' -exec rm -rf {} \;)")
+    os.system('(cd ' + os.path.join(xyzdir, filename) +
+                  " && find . -name 'fort.7' -exec rm -rf {} \;)")
+    os.system('(cd ' + os.path.join(xyzdir, filename) +
+                  " && find . -name 'core*' -exec rm -rf {} \;)")
     if os.path.isfile(os.path.join(xyzdir, filename, filename + '_S1.log')) and \
             os.path.isfile(os.path.join(xyzdir, filename, filename + '_T1.log')):
         os.system('(cd ' + os.path.join(xyzdir, filename) +

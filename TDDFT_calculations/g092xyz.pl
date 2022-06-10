@@ -94,6 +94,9 @@ sub symbol{
   if ($an == 14){
     $s="Si";
   }
+  if ($an == 15){
+    $s="P";
+  }
   if ($an == 16){
     $s="S";
   }
