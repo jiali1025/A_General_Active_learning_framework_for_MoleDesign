@@ -76,6 +76,9 @@ sub symbol{
   if ($an == 1){
     $s="H";
   }
+  if ($an == 3){
+    $s="Li";
+  }
   if ($an == 5){
     $s="B";
   }
@@ -91,6 +94,15 @@ sub symbol{
   if ($an == 9){
     $s="F";
   }
+  if ($an == 11){
+    $s="Na";
+  }
+  if ($an == 12){
+    $s="Mg";
+  }
+  if ($an == 13){
+    $s="Al";
+  }
   if ($an == 14){
     $s="Si";
   }
@@ -103,8 +115,104 @@ sub symbol{
   if ($an == 17){
     $s="Cl";
   }
-  if($an == 35){
+  if ($an == 18){
+    $s="Ar";
+  }
+  if ($an == 19){
+    $s="K";
+  }
+  if ($an == 20){
+    $s="Ca";
+  }
+  if ($an == 22){
+    $s="Ti";
+  }
+  if ($an == 24){
+    $s="Cr";
+  }
+  if ($an == 26){
+    $s="Fe";
+  }
+  if ($an == 28){
+    $s="Ni";
+  }
+  if ($an == 30){
+    $s="Zn";
+  }
+  if ($an == 31){
+    $s="Ga";
+  }
+  if ($an == 32){
+    $s="Ge";
+  }
+  if ($an == 33){
+    $s="As";
+  }
+  if ($an == 34){
+    $s="Se";
+  }
+  if ($an == 35){
     $s="Br";
+  }
+  if ($an == 36){
+    $s="Kr";
+  }
+  if ($an == 38){
+    $s="Sr";
+  }
+  if ($an == 42){
+    $s="Mo";
+  }
+  if ($an == 44){
+    $s="Ru";
+  }
+  if ($an == 46){
+    $s="Pd";
+  }
+  if ($an == 47){
+    $s="Ag";
+  }
+  if ($an == 48){
+    $s="Cd";
+  }
+  if ($an == 49){
+    $s="In";
+  }
+  if ($an == 50){
+    $s="Sn";
+  }
+  if ($an == 52){
+    $s="Te";
+  }
+  if ($an == 53){
+    $s="I";
+  }
+  if ($an == 54){
+    $s="Xe";
+  }
+  if ($an == 56){
+    $s="Ba";
+  }
+  if ($an == 72){
+    $s="Hf";
+  }
+  if ($an == 73){
+    $s="Ta";
+  }
+  if ($an == 74){
+    $s="W";
+  }
+  if ($an == 78){
+    $s="Pt";
+  }
+  if ($an == 80){
+    $s="Hg";
+  }
+  if ($an == 82){
+    $s="Pb";
+  }
+  if ($an == 83){
+    $s="Bi";
   }
  return $s;
 }
