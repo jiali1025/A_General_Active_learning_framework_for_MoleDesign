@@ -403,7 +403,10 @@ nodes = args.nodes
 node_index = args.index
 print('reading csv')
 df = pd.read_csv(smiles_path)
-df_data = pd.read_csv('TDDFT_'+smiles_path)
+if os.path.isfile('TDDFT_' + smiles_path):
+    df_data = pd.read_csv('TDDFT_'+smiles_path)
+else:
+    df_data = pd.DataFrame(columns=['SMILES', 'S1', 'T1'])
 smiInd = -1
 for index, col in enumerate(df.columns):
     if col.lower() == 'smiles':
