@@ -23,7 +23,8 @@ class SimpleArgParse(Tap):
     smiles_path: str
     index: int
     nodes: int
-    ephemdir: str = os.path.dirname('/pool001/skverma/ephemeral/')
+    ephemdir: str = os.path.dirname('/nobackup1/skverma/ephemeral/')
+    storagedir: str = os.path.dirname('/pool001/skverma/ephemeral/')
     """Defaults to SCOP_DB directory"""
     log: str = 'warning'
 
@@ -114,7 +115,7 @@ def gen_xyz(filename, isFile=True):
 def gen_S0_comfiles(smiles, filename):
     # if os.path.isfile(os.path.join(xyzdir, filename, filename + '_S0.com')):
     #     return
-    with open(os.path.join(xyzdir, filename, 'smiles'), 'w') as file:
+    with open(os.path.join(xyzdir, filename, 'smiles.txt'), 'w') as file:
         file.write(smiles + '\n')
     os.system('(cd ' + os.path.join(xyzdir, filename) +
               " && obabel -ixyz " + filename + ".xyz -O " + filename + "_prelim.com)")
@@ -271,12 +272,7 @@ def run_T1_TDDFT(filename):
 
 # compile results
 def extract_data(filename):
-    os.system('(cd ' + os.path.join(xyzdir, filename) +
-                  " && find . -name 'gauss_*.chk' -exec rm -rf {} \;)")
-    os.system('(cd ' + os.path.join(xyzdir, filename) +
-                  " && find . -name 'fort.7' -exec rm -rf {} \;)")
-    os.system('(cd ' + os.path.join(xyzdir, filename) +
-                  " && find . -name 'core*' -exec rm -rf {} \;)")
+    
     if os.path.isfile(os.path.join(xyzdir, filename, filename + '_S1.log')) and \
             os.path.isfile(os.path.join(xyzdir, filename, filename + '_T1.log')):
         os.system('(cd ' + os.path.join(xyzdir, filename) +
@@ -288,6 +284,16 @@ def extract_data(filename):
             file.write('')
         with open('excitedstate_T1.out', 'w') as file:
             file.write('')
+
+def clean_directory(filename):
+    os.system('(cd ' + os.path.join(xyzdir, filename) +
+                  " && find . -name 'gauss_*.chk' -exec rm -rf {} \;)")
+    os.system('(cd ' + os.path.join(xyzdir, filename) +
+                  " && find . -name 'fort.7' -exec rm -rf {} \;)")
+    os.system('(cd ' + os.path.join(xyzdir, filename) +
+                  " && find . -name 'core*' -exec rm -rf {} \;)")
+    os.system('rsync --remove-source-files -azh ' + os.path.join(xyzdir, filename) + ' ' + os.path.join(xyzdir_storage))
+    os.system('rm -r ' + os.path.join(xyzdir, filename))
 
 
 def compile_data():
@@ -331,6 +337,7 @@ levels = {
 }
 logLevel = levels.get(args.log.lower())
 ephemdir = args.ephemdir
+storagedir = args.storagedir
 smiles_path = args.smiles_path
 smiles_filename = os.path.basename(smiles_path)
 smiles_file = os.path.splitext(smiles_filename)[0]
@@ -338,6 +345,7 @@ xyzdirname = 'xyzfiles_TDDFT_' + smiles_file
 comdirname = 'comfiles_TDDFT_' + smiles_file
 TDDFT_multi_dirname = os.path.join(ephemdir, 'TDDFT_multi')
 xyzdir = os.path.join(ephemdir, xyzdirname)
+xyzdir_storage = os.path.join(storagedir, xyzdirname)
 comdir = os.path.join(ephemdir, comdirname)
 if not os.path.isdir(xyzdir):
     os.mkdir(xyzdir)
@@ -359,9 +367,6 @@ for index, val in enumerate(data[0].replace('\n', '').split(',')):
     if val.lower() == 'smiles':
         smiInd = index
 
-print('reading csv')
-df = pd.read_csv(smiles_path)
-df.info()
 
 
 def auto_TDDFT(smiles, filename):
@@ -386,6 +391,8 @@ def auto_TDDFT(smiles, filename):
     run_T1_TDDFT(filename)
     print('extracting data')
     extract_data(filename)
+    print('cleaning directory')
+    clean_directory(filename)
     with open('progress.out', 'a') as file:
         file.write('finished calcs for ' + filename + '\n')
 
@@ -394,7 +401,9 @@ memGB = '100gb'
 coresCPU = '40'
 nodes = args.nodes
 node_index = args.index
+print('reading csv')
 df = pd.read_csv(smiles_path)
+df_data = pd.read_csv('TDDFT_'+smiles_path)
 smiInd = -1
 for index, col in enumerate(df.columns):
     if col.lower() == 'smiles':
@@ -402,10 +411,15 @@ for index, col in enumerate(df.columns):
 total = len(df.iloc[:, smiInd])
 mols_per_node = int(np.floor(total / nodes) + 1)
 for i in np.arange((node_index - 1) * mols_per_node, node_index * mols_per_node):
+    smiles = df.iloc[i, smiInd]
     IDstr = 'ID' + '%09d' % i
-    with open(os.path.join(xyzdir, IDstr, 'smiles.txt')) as file:
-        smiles = file.readline()
-    auto_TDDFT(smiles, IDstr)
+    if smiles in df_data['SMILES'].values:
+        continue
+    else:
+        os.mkdir(os.path.join(xyzdir, IDstr))
+        with open(os.path.join(xyzdir, IDstr, 'smiles.txt'), 'w') as file:
+            file.write(smiles)
+        auto_TDDFT(smiles, IDstr)
 
 
 print('successfully completed!')

@@ -21,8 +21,8 @@ class SimpleArgParse(Tap):
     # xyzdir: str
     # """Directory with xyz files to compute"""
     smiles_path: str
-    create_dir: bool = False
-    ephemdir: str = os.path.dirname('/pool001/skverma/ephemeral/')
+    skip_create_dir: bool = False
+    ephemdir: str = os.path.dirname('/nobackup1/skverma/ephemeral/')
     """Defaults to SCOP_DB directory"""
     log: str = 'warning'
 
@@ -40,7 +40,7 @@ levels = {
 logLevel = levels.get(args.log.lower())
 ephemdir = args.ephemdir
 smiles_path = args.smiles_path
-create_dir = args.create_dir
+create_dir = not args.skip_create_dir
 smiles_filename = os.path.basename(smiles_path)
 smiles_file = os.path.splitext(smiles_filename)[0]
 xyzdirname = 'xyzfiles_TDDFT_' + smiles_file
@@ -61,30 +61,30 @@ logging.root.setLevel(logLevel)
 logging.basicConfig(level=logLevel)
 
 
-with open(smiles_path, 'r') as file:
-    data = file.readlines()
-smiInd = -1
-for index, val in enumerate(data[0].replace('\n', '').split(',')):
-    if val.lower() == 'smiles':
-        smiInd = index
+# with open(smiles_path, 'r') as file:
+#     data = file.readlines()
+# smiInd = -1
+# for index, val in enumerate(data[0].replace('\n', '').split(',')):
+#     if val.lower() == 'smiles':
+#         smiInd = index
 
-print('reading csv')
-df = pd.read_csv(smiles_path)
-df.info()
-if create_dir:
-    print('creating directories')
-    for ID, smiles in tqdm(enumerate(df.iloc[:, smiInd]), total=len(df.iloc[:, smiInd])):
-        IDstr = 'ID' + '%09d' % ID
-        IDdir = os.path.join(xyzdir, IDstr)
-        if not os.path.isfile(os.path.join(IDdir, 'smiles.txt')):
-            try:
-                os.mkdir(IDdir)
-            except FileExistsError:
-                pass
-            try:
-                with open(os.path.join(IDdir, 'smiles.txt'), 'w') as file:
-                    file.write(smiles)
-            except TypeError:
-                continue
+# print('reading csv')
+# df = pd.read_csv(smiles_path)
+# df.info()
+# if create_dir:
+#     print('creating directories')
+#     for ID, smiles in tqdm(enumerate(df.iloc[:, smiInd]), total=len(df.iloc[:, smiInd])):
+#         IDstr = 'ID' + '%09d' % ID
+#         IDdir = os.path.join(xyzdir, IDstr)
+#         if not os.path.isfile(os.path.join(IDdir, 'smiles.txt')):
+#             try:
+#                 os.mkdir(IDdir)
+#             except FileExistsError:
+#                 pass
+#             try:
+#                 with open(os.path.join(IDdir, 'smiles.txt'), 'w') as file:
+#                     file.write(smiles)
+#             except TypeError:
+#                 continue
 
 os.system('sbatch --export SMILES_PATH=' + smiles_path + ' job_TDDFT_multi_array')

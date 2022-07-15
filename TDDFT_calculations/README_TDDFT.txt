@@ -23,16 +23,14 @@ tqdm
 
 6. Check the other lines in the job script including partition choice (with -p), module loading, and conda environment activation. Change them to the desired values.
 
-7. Change the ephemdir directory in all 3 TDDFT_from_SMILES* files (either in the python file itself in the SimpleArgParse class, or as an input argument in-line). This will be where all the calculations are done so make sure there is enough storage in this location.
+7. Change the ephemdir and storagedir directories in all 3 TDDFT_from_SMILES* files (either in the python file itself in the SimpleArgParse class, or as an input argument in-line). ephemdir is where all the calculations are done so make sure that filesystem is optimized for parallel operation. After calculations are complete the files are moved to storagedir so make there there is enough storage in that directory. (i.e. for engaging /nobackup is used for ephemeral and /pool001 is used for storage.)
 
 
 How to Run
 
-1. Run the setup script. This will create all the directories and submit the job array to SLURM. For example:
+1. Run the setup script. This will submit the job array to SLURM. For example:
 
-python TDDFT_from_SMILES_setup.py --smiles_path test.csv --create_dir
-
-For future runs, you can leave out the --create_dir keyword to save some time.
+python TDDFT_from_SMILES_setup.py --smiles_path test.csv
 
 2. Wait for calculations to complete. Check the job queue for progress.
 
@@ -40,5 +38,11 @@ For future runs, you can leave out the --create_dir keyword to save some time.
 
 python TDDFT_from_SMILES_compile.py --smiles_path test.csv
 
-4. This will create a file called TDDFT_test.csv - check test results against TDDFT_test_result.csv to ensure everything ran correctly.
+4. This will create a new file TDDFT_test.csv with all the results!
 
+5. If a run stops unexpectedly, run the TDDFT_from_SMILES_compile.py script to compile all completed calculations. Then you can rerun TDDFT_from_SMILES_setup.py and it will automatically skip over molecules with TDDFT results already completed.
+
+
+Notes
+
+1. Previous versions created all directories before computation started, but this hit disk quotas of maximum file/folder numbers. Now, directories are created as needed.

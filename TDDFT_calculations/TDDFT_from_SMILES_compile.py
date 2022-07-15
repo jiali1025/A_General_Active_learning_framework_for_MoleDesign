@@ -21,12 +21,13 @@ class SimpleArgParse(Tap):
     # xyzdir: str
     # """Directory with xyz files to compute"""
     smiles_path: str
-    ephemdir: str = os.path.dirname('/pool001/skverma/ephemeral/')
+    storagedir: str = os.path.dirname('/pool001/skverma/ephemeral/')
     """Defaults to SCOP_DB directory"""
     log: str = 'warning'
 
 def compile_data():
     exDataFile = 'TDDFT_' + smiles_filename
+    os.system('cp TDDFT_' + smiles_filename + ' TDDFT_backup_' + smiles_filename)
     with open(exDataFile, 'w') as file:
         file.write('SMILES,TDDFT_S1,TDDFT_T1\n')
     allData = {}
@@ -66,21 +67,21 @@ levels = {
     'debug': logging.DEBUG
 }
 logLevel = levels.get(args.log.lower())
-ephemdir = args.ephemdir
+storagedir = args.storagedir
 smiles_path = args.smiles_path
 smiles_filename = os.path.basename(smiles_path)
 smiles_file = os.path.splitext(smiles_filename)[0]
 xyzdirname = 'xyzfiles_TDDFT_' + smiles_file
 comdirname = 'comfiles_TDDFT_' + smiles_file
-TDDFT_multi_dirname = os.path.join(ephemdir, 'TDDFT_multi')
-xyzdir = os.path.join(ephemdir, xyzdirname)
-comdir = os.path.join(ephemdir, xyzdirname)
+TDDFT_multi_dirname = os.path.join(storagedir, 'TDDFT_multi')
+xyzdir = os.path.join(storagedir, xyzdirname)
+comdir = os.path.join(storagedir, xyzdirname)
 if not os.path.isdir(xyzdir):
     os.mkdir(xyzdir)
 if not os.path.isdir(comdir):
     os.mkdir(comdir)
 resultsdirname = xyzdirname.replace('xyzfiles_', 'TDDFTresults_')
-resultsdir = os.path.join(ephemdir, resultsdirname)
+resultsdir = os.path.join(storagedir, resultsdirname)
 if not os.path.isdir(resultsdir):
     os.mkdir(resultsdir)
 errFiles = []
