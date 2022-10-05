@@ -1,0 +1,10 @@
+#!/bin/bash
+
+#SBATCH --gres=gpu:volta:1
+#SBATCH -n 40
+#SBATCH -N 1
+
+module load anaconda/2022a
+source activate chemprop
+export LD_LIBRARY_PATH=/home/gridsan/sverma/.conda/envs/chemprop/lib
+python xTB_ML_combined_training.py
