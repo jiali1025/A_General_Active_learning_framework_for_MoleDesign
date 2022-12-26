@@ -1,0 +1,16 @@
+Fold 0
+Model 0 best validation rmse = 0.233145 on epoch 32
+Model 0 test rmse = 0.251424
+Model 1 best validation rmse = 0.229600 on epoch 37
+Model 1 test rmse = 0.246565
+Model 2 best validation rmse = 0.230505 on epoch 40
+Model 2 test rmse = 0.245778
+Model 3 best validation rmse = 0.227657 on epoch 38
+Model 3 test rmse = 0.240122
+Model 4 best validation rmse = 0.236847 on epoch 42
+Model 4 test rmse = 0.255824
+Ensemble test rmse = 0.226074
+1-fold cross validation
+	Seed 666 ==> test rmse = 0.226074
+Overall test rmse = 0.226074 +/- 0.000000
+Elapsed time = 2:42:59
