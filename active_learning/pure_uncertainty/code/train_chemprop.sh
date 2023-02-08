@@ -1,0 +1,1 @@
+chemprop_train --data_path "train_set/train_round7.csv" --dataset_type regression --split_type random --split_sizes 0.94 0.05 0.01 --save_dir "model/round_7" --epochs 50 --ensemble_size 5 --seed 666 --smiles_column SMILES --target_columns xTB_S1 xTB_T1 --num_workers 0
