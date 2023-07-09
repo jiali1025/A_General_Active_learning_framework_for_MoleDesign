@@ -9,7 +9,7 @@ from rdkit import Chem
 
 from .scaler import StandardScaler, AtomBondScaler
 from chemprop.features import get_features_generator
-from chemprop.features import BatchMolGraph, MolGraph
+from chemprop.features import MolGraphPretrain, BatchMolGraphPretrain, BatchMolGraph, MolGraph
 from chemprop.features import is_explicit_h, is_reaction, is_adding_hs, is_mol, is_keeping_atom_map
 from chemprop.rdkit import make_mol
 
@@ -27,7 +27,6 @@ Also in args, set no_cache_mol = True
 '''
 CACHE_MOL = False
 SMILES_TO_MOL: Dict[str, Union[Chem.Mol, Tuple[Chem.Mol, Chem.Mol]]] = {}
-
 
 def cache_graph() -> bool:
     r"""Returns whether :class:`~chemprop.features.MolGraph`\ s will be cached."""
@@ -59,7 +58,14 @@ def set_cache_mol(cache_mol: bool) -> None:
 
 class MoleculeDatapoint:
     """A :class:`MoleculeDatapoint` contains a single molecule and its associated features and targets."""
+    '''
+    
+    The MoleculeDatapoint object can be used for pretraining without any modifications.
+    The only thing is normally for pretraining the targets are generated on the fly of pretraining, thus the targets will be a list of None,
+    These targets will not be used, thus the associated mask will not be used, all this will form a different train.py.
+    Unless there are precomputed extra mask atom idx or precomputed extra mask bond idx (Maybe depreciated and not include this feature for first version?)
 
+    '''
     def __init__(self,
                  smiles: List[str],
                  targets: List[Optional[float]] = None,
@@ -78,8 +84,14 @@ class MoleculeDatapoint:
                  bond_descriptors: np.ndarray = None,
                  raw_constraints: np.ndarray = None,
                  constraints: np.ndarray = None,
+                 is_pretrain: bool = False,
                  overwrite_default_atom_features: bool = False,
-                 overwrite_default_bond_features: bool = False):
+                 overwrite_default_bond_features: bool = False,
+                 mask_bond_pre_extra_mask_idx: List[Union[int, float]] = None,
+                 mask_atom_pre_extra_mask_idx: List[Union[int, float]] = None,
+                 mask_atom_pre_auto: bool = True,
+                 mask_bond_pre_auto: bool = True,
+                 ):
         """
         :param smiles: A list of the SMILES strings for the molecules.
         :param targets: A list of targets for the molecule (contains None for unknown target values).
@@ -96,9 +108,13 @@ class MoleculeDatapoint:
         :param bond_descriptors: A numpy array containing additional bond descriptors to featurize the molecule.
         :param raw_constraints: A numpy array containing all user-provided atom/bond-level constraints in input data.
         :param constraints: A numpy array containing atom/bond-level constraints that are used in training. Param constraints is a subset of param raw_constraints.
+        :param is_pretrain: Boolean to state whether it is self-supervised pretrain mode.
         :param overwrite_default_atom_features: Boolean to overwrite default atom features by atom_features.
         :param overwrite_default_bond_features: Boolean to overwrite default bond features by bond_features.
-
+        :param mask_atom_pre_auto: Boolean to state whether the mask atom pretrain is done by auto masking with random.
+        :param mask_atom_pre_extra_mask_idx: A list of int or float to state pre_determined masked atom index.
+        :param mask_bond_pre_auto: Boolean to state whether the bond deletion  is done by auto delete with random.
+        :param mask_bond_pre_extra_mask_idx: A list of int or float to state pre_determined masked bond index.
         """
         self.smiles = smiles
         self.targets = targets
@@ -121,6 +137,20 @@ class MoleculeDatapoint:
         self.is_explicit_h_list = [is_explicit_h(x) for x in self.is_mol_list]
         self.is_adding_hs_list = [is_adding_hs(x) for x in self.is_mol_list]
         self.is_keeping_atom_map_list = [is_keeping_atom_map(x) for x in self.is_mol_list]
+        self.is_pretrain = is_pretrain
+        self.mask_atom_pre_auto = mask_atom_pre_auto
+        self.mask_bond_pre_auto = mask_bond_pre_auto
+        self.mask_atom_pre_extra_mask_idx = None
+        self.mask_bond_pre_extra_mask_idx = None
+
+
+        if self.is_pretrain:
+            if not self.mask_atom_pre_auto:
+                self.mask_atom_pre_extra_mask_idx = mask_atom_pre_extra_mask_idx
+            if not self.mask_bond_pre_auto:
+                self.mask_bond_pre_extra_mask_idx = mask_bond_pre_extra_mask_idx
+
+
 
         if data_weight is not None:
             self.data_weight = data_weight
@@ -145,13 +175,12 @@ class MoleculeDatapoint:
                         # for H2
                         elif m is not None and m.GetNumHeavyAtoms() == 0:
                             # not all features are equally long, so use methane as dummy molecule to determine length
-                            self.features.extend(np.zeros(len(features_generator(Chem.MolFromSmiles('C')))))                           
+                            self.features.extend(np.zeros(len(features_generator(Chem.MolFromSmiles('C')))))
                     else:
                         if m[0] is not None and m[1] is not None and m[0].GetNumHeavyAtoms() > 0:
                             self.features.extend(features_generator(m[0]))
                         elif m[0] is not None and m[1] is not None and m[0].GetNumHeavyAtoms() == 0:
-                            self.features.extend(np.zeros(len(features_generator(Chem.MolFromSmiles('C')))))   
-                    
+                            self.features.extend(np.zeros(len(features_generator(Chem.MolFromSmiles('C')))))
 
             self.features = np.array(self.features)
 
@@ -185,7 +214,8 @@ class MoleculeDatapoint:
     @property
     def mol(self) -> List[Union[Chem.Mol, Tuple[Chem.Mol, Chem.Mol]]]:
         """Gets the corresponding list of RDKit molecules for the corresponding SMILES list."""
-        mol = make_mols(self.smiles, self.is_reaction_list, self.is_explicit_h_list, self.is_adding_hs_list, self.is_keeping_atom_map_list)
+        mol = make_mols(self.smiles, self.is_reaction_list, self.is_explicit_h_list, self.is_adding_hs_list,
+                        self.is_keeping_atom_map_list)
         if cache_mol():
             for s, m in zip(self.smiles, mol):
                 SMILES_TO_MOL[s] = m
@@ -323,7 +353,8 @@ class MoleculeDataset(Dataset):
 
         return [d.smiles for d in self._data]
 
-    def mols(self, flatten: bool = False) -> Union[List[Chem.Mol], List[List[Chem.Mol]], List[Tuple[Chem.Mol, Chem.Mol]], List[List[Tuple[Chem.Mol, Chem.Mol]]]]:
+    def mols(self, flatten: bool = False) -> Union[
+        List[Chem.Mol], List[List[Chem.Mol]], List[Tuple[Chem.Mol, Chem.Mol]], List[List[Tuple[Chem.Mol, Chem.Mol]]]]:
         """
         Returns a list of the RDKit molecules associated with each :class:`MoleculeDatapoint`.
 
@@ -383,6 +414,18 @@ class MoleculeDataset(Dataset):
         else:
             return True
 
+    # @property
+    # def is_pretrain(self) -> bool:
+    #     """
+    #     Gets the Boolean whether this is in self supervised learning pretraining mode.
+    #
+    #     :return: A Boolean value.
+    #     """
+    #     if self.is_pretrain:
+    #         return True
+    #     else:
+    #         return False
+
     def batch_graph(self) -> List[BatchMolGraph]:
         r"""
         Constructs a :class:`~chemprop.features.BatchMolGraph` with the graph featurization of all the molecules.
@@ -421,6 +464,110 @@ class MoleculeDataset(Dataset):
             self._batch_graph = [BatchMolGraph([g[i] for g in mol_graphs]) for i in range(len(mol_graphs[0]))]
 
         return self._batch_graph
+
+    def batch_graph_pretrain_MA(self,mask_atom_pre_percent) -> List[BatchMolGraphPretrain]:
+        r"""
+        Constructs a :class:`~chemprop.features.BatchMolGraphPretrain` with the graph featurization of all the molecules.
+        :param mask_atom_pre_percent: The percentage of the atom to mask if mask_atom_pre_auto = True
+        :return: A list of :class:`~chemprop.features.BatchMolGraphPretrain` containing the graph featurization of all the
+                 molecules in each :class:`MoleculeDatapoint`. An irreversible mask atom operation is applied.
+
+        Note: This function will not change the self._batch_graph varible, self._batch_graph will still be the original graph
+        """
+
+        mol_graphs_MA = []
+        for d in self._data:
+            mol_graphs_list_MA = []
+            for s, m in zip(d.smiles, d.mol):
+
+                mol_graph_pretrain = MolGraphPretrain(m, d.atom_features, d.bond_features,
+                                     overwrite_default_atom_features=d.overwrite_default_atom_features,
+                                     overwrite_default_bond_features=d.overwrite_default_bond_features,
+                                     mask_atom_pre_auto=d.mask_atom_pre_auto,
+                                     mask_atom_pre_percent=mask_atom_pre_percent,
+                                     mask_atom_pre_extra_mask_idx=d.mask_atom_pre_extra_mask_idx,
+                                     mask_bond_pre_auto=d.mask_bond_pre_auto,
+                                     mask_bond_pre_extra_mask_idx=d.mask_bond_pre_extra_mask_idx,
+                                     )
+                mol_graph_pretrain.masked_atom_pretraining()
+
+                mol_graphs_list_MA.append(mol_graph_pretrain)
+            mol_graphs_MA.append(mol_graphs_list_MA)
+
+        batch_graph_MA = [BatchMolGraphPretrain([g[i] for g in mol_graphs_MA]) for i in range(len(mol_graphs_MA[0]))]
+
+        return batch_graph_MA
+
+    def batch_graph_pretrain_BD(self,mask_bond_pre_percent) -> List[BatchMolGraphPretrain]:
+        r"""
+        Constructs a :class:`~chemprop.features.BatchMolGraphPretrain` with the graph featurization of all the molecules.
+
+        :param mask_bond_pre_percent: The percentage of the bond to mask if mask_bond_pre_auto = True
+        :return: A list of :class:`~chemprop.features.BatchMolGraphPretrain` containing the graph featurization of all the
+                 molecules in each :class:`MoleculeDatapoint`. An irreversible mask bond operation is applied.
+        Note: This function will not change the self._batch_graph varible, self._batch_graph will still be the original graph
+
+        """
+
+        mol_graphs_BD = []
+        for d in self._data:
+            mol_graphs_list_BD = []
+            for s, m in zip(d.smiles, d.mol):
+
+                mol_graph_pretrain = MolGraphPretrain(m, d.atom_features, d.bond_features,
+                                     overwrite_default_atom_features=d.overwrite_default_atom_features,
+                                     overwrite_default_bond_features=d.overwrite_default_bond_features,
+                                     mask_atom_pre_auto=d.mask_atom_pre_auto,
+                                     mask_atom_pre_extra_mask_idx=d.mask_atom_pre_extra_mask_idx,
+                                     mask_bond_pre_auto=d.mask_bond_pre_auto,
+                                     mask_bond_pre_extra_mask_idx=d.mask_bond_pre_extra_mask_idx,
+                                     mask_bond_pre_percent=mask_bond_pre_percent
+                                     )
+                mol_graph_pretrain.bond_deletion_complete()
+
+                mol_graphs_list_BD.append(mol_graph_pretrain)
+            mol_graphs_BD.append(mol_graphs_list_BD)
+
+        batch_graph_BD = [BatchMolGraphPretrain([g[i] for g in mol_graphs_BD]) for i in range(len(mol_graphs_BD[0]))]
+
+        return batch_graph_BD
+
+    def batch_graph_pretrain_SG(self, mask_subgraph_pre_percent,center_list) -> List[BatchMolGraphPretrain]:
+        r"""
+        Constructs a :class:`~chemprop.features.BatchMolGraphPretrain` with the graph featurization of all the molecules.
+
+        :param mask_subgraph_pre_percent: Float to state the percentage of subgraph to mask in subgraph deletion pretrain.
+        :param center_list: A list of int to state the start center atom in each molecule of subgraph to mask in subgraph deletion pretrain.
+        :return: A list of :class:`~chemprop.features.BatchMolGraphPretrain` containing the graph featurization of all the
+                 molecules in each :class:`MoleculeDatapoint`. An irreversible subgraph deletion operation is applied.
+        Note: This function will not change the self._batch_graph varible, self._batch_graph will still be the original graph
+
+        """
+        # Not quite suitable for a list of list of mols yet. Since the center list should have a different shape
+        # Now is good for current SSL pretrain setting.
+
+        mol_graphs_SG = []
+        center_list = center_list
+        for i, d in enumerate(self._data):
+            mol_graphs_list_SG = []
+            for s, m in zip(d.smiles, d.mol):
+                mol_graph_pretrain = MolGraphPretrain(m, d.atom_features, d.bond_features,
+                                                      overwrite_default_atom_features=d.overwrite_default_atom_features,
+                                                      overwrite_default_bond_features=d.overwrite_default_bond_features,
+                                                      mask_atom_pre_auto=d.mask_atom_pre_auto,
+                                                      mask_atom_pre_extra_mask_idx=d.mask_atom_pre_extra_mask_idx,
+                                                      mask_bond_pre_auto=d.mask_bond_pre_auto,
+                                                      mask_bond_pre_extra_mask_idx=d.mask_bond_pre_extra_mask_idx,
+                                                      mask_subgraph_pre_percent=mask_subgraph_pre_percent
+                                                      )
+                mol_graph_pretrain.subgraph_deletion(center_list[i])
+
+                mol_graphs_list_SG.append(mol_graph_pretrain)
+            mol_graphs_SG.append(mol_graphs_list_SG)
+
+        batch_graph_SG = [BatchMolGraphPretrain([g[i] for g in mol_graphs_SG]) for i in range(len(mol_graphs_SG[0]))]
+
+        return batch_graph_SG
 
     def features(self) -> List[np.ndarray]:
         """
@@ -498,7 +645,7 @@ class MoleculeDataset(Dataset):
         """
         constraints = []
         for d in self._data:
-            if d.constraints is None :
+            if d.constraints is None:
                 natom_targets = len(d.atom_targets) if d.atom_targets is not None else 0
                 nbond_targets = len(d.bond_targets) if d.bond_targets is not None else 0
                 ntargets = natom_targets + nbond_targets
@@ -525,7 +672,7 @@ class MoleculeDataset(Dataset):
         atom_bond_data_weights = [[] for _ in targets[0]]
         for i, tb in enumerate(targets):
             weight = data_weights[i]
-            for j, x in enumerate(tb): 
+            for j, x in enumerate(tb):
                 atom_bond_data_weights[j] += [1. * weight] * len(x)
 
         return atom_bond_data_weights
@@ -537,7 +684,7 @@ class MoleculeDataset(Dataset):
         :return: A list of lists of floats (or None) containing the targets.
         """
         return [d.targets for d in self._data]
-    
+
     def mask(self) -> List[List[bool]]:
         """
         Returns whether the targets associated with each molecule and task are present.
@@ -558,7 +705,7 @@ class MoleculeDataset(Dataset):
     def gt_targets(self) -> List[np.ndarray]:
         """
         Returns indications of whether the targets associated with each molecule are greater-than inequalities.
-        
+
         :return: A list of lists of booleans indicating whether the targets in those positions are greater-than inequality targets.
         """
         if not hasattr(self._data[0], 'gt_targets'):
@@ -569,7 +716,7 @@ class MoleculeDataset(Dataset):
     def lt_targets(self) -> List[np.ndarray]:
         """
         Returns indications of whether the targets associated with each molecule are less-than inequalities.
-        
+
         :return: A list of lists of booleans indicating whether the targets in those positions are less-than inequality targets.
         """
         if not hasattr(self._data[0], 'lt_targets'):
@@ -630,7 +777,8 @@ class MoleculeDataset(Dataset):
             if len(self._data) > 0 and self._data[0].bond_features is not None else None
 
     def normalize_features(self, scaler: StandardScaler = None, replace_nan_token: int = 0,
-                           scale_atom_descriptors: bool = False, scale_bond_descriptors: bool = False) -> StandardScaler:
+                           scale_atom_descriptors: bool = False,
+                           scale_bond_descriptors: bool = False) -> StandardScaler:
         """
         Normalizes the features of the dataset using a :class:`~chemprop.data.StandardScaler`.
 
@@ -729,11 +877,13 @@ class MoleculeDataset(Dataset):
         for i in range(n_atom_targets):
             scaled_targets[i] = np.split(np.array(scaled_targets[i]).flatten(), np.cumsum(np.array(n_atoms)))[:-1]
         for i in range(n_bond_targets):
-            scaled_targets[i+n_atom_targets] = np.split(np.array(scaled_targets[i+n_atom_targets]).flatten(), np.cumsum(np.array(n_bonds)))[:-1]
+            scaled_targets[i + n_atom_targets] = np.split(np.array(scaled_targets[i + n_atom_targets]).flatten(),
+                                                          np.cumsum(np.array(n_bonds)))[:-1]
         scaled_targets = np.array(scaled_targets, dtype=object).T
         self.set_targets(scaled_targets)
 
         return scaler
+
 
     def set_targets(self, targets: List[List[Optional[float]]]) -> None:
         """
@@ -772,7 +922,6 @@ class MoleculeDataset(Dataset):
                  if a slice is provided.
         """
         return self._data[item]
-
 
 class MoleculeSampler(Sampler):
     """A :class:`MoleculeSampler` samples data from a :class:`MoleculeDataset` for a :class:`MoleculeDataLoader`."""
@@ -920,8 +1069,8 @@ class MoleculeDataLoader(DataLoader):
         """
         if self._class_balance or self._shuffle:
             raise ValueError('Cannot safely extract targets when class balance or shuffle are enabled.')
-        
-        if not hasattr(self._dataset[0],'gt_targets'):
+
+        if not hasattr(self._dataset[0], 'gt_targets'):
             return None
 
         return [self._dataset[index].gt_targets for index in self._sampler]
@@ -936,11 +1085,10 @@ class MoleculeDataLoader(DataLoader):
         if self._class_balance or self._shuffle:
             raise ValueError('Cannot safely extract targets when class balance or shuffle are enabled.')
 
-        if not hasattr(self._dataset[0],'lt_targets'):
+        if not hasattr(self._dataset[0], 'lt_targets'):
             return None
 
         return [self._dataset[index].lt_targets for index in self._sampler]
-
 
     @property
     def iter_size(self) -> int:
@@ -951,7 +1099,7 @@ class MoleculeDataLoader(DataLoader):
         r"""Creates an iterator which returns :class:`MoleculeDataset`\ s"""
         return super(MoleculeDataLoader, self).__iter__()
 
-    
+
 def make_mols(smiles: List[str], reaction_list: List[bool], keep_h_list: List[bool], add_h_list: List[bool], keep_atom_map_list: List[bool]):
     """
     Builds a list of RDKit molecules (or a list of tuples of molecules if reaction is True) for a list of smiles.
@@ -970,4 +1118,3 @@ def make_mols(smiles: List[str], reaction_list: List[bool], keep_h_list: List[bo
         else:
             mol.append(SMILES_TO_MOL[s] if s in SMILES_TO_MOL else make_mol(s, keep_h, add_h, keep_atom_map))
     return mol
-

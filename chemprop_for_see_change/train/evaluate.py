@@ -93,6 +93,9 @@ def evaluate_predictions(preds: List[List[float]],
                 if dataset_type == 'multiclass' and metric == 'cross_entropy':
                     results[metric].append(metric_func(valid_targets[i], valid_preds[i],
                                                     labels=list(range(len(valid_preds[i][0])))))
+                elif dataset_type == 'SSL_pretrain' and metric == 'cross_entropy':
+                    results[metric].append(metric_func(valid_targets[i], valid_preds[i],
+                                                    labels=list(range(len(valid_preds[i][0])))))
                 elif metric in ['bounded_rmse', 'bounded_mse', 'bounded_mae']:
                     results[metric].append(metric_func(valid_targets[i], valid_preds[i], gt_targets[i], lt_targets[i]))
                 else:
@@ -110,7 +113,10 @@ def evaluate(model: MoleculeModel,
              dataset_type: str,
              scaler: StandardScaler = None,
              atom_bond_scaler: AtomBondScaler = None,
-             logger: logging.Logger = None) -> Dict[str, List[float]]:
+             logger: logging.Logger = None,
+             is_pretrain_and_with_MA: bool = False,
+             pretrain_mask_percent: float = 0.0
+             ) -> Dict[str, List[float]]:
     """
     Evaluates an ensemble of models on a dataset by making predictions and then evaluating the predictions.
 
@@ -122,6 +128,9 @@ def evaluate(model: MoleculeModel,
     :param scaler: A :class:`~chemprop.features.scaler.StandardScaler` object fit on the training targets.
     :param atom_bond_scaler: A :class:`~chemprop.data.scaler.AtomBondScaler` fitted on the atomic/bond targets.
     :param logger: A logger to record output.
+    :param is_pretrain_and_with_MA: A bool indicate whether it is pretrain mode or not, also only need to predict when MA task is involved otherwise no need.
+    :param pretrain_mask_percent: A float indicates how much percent of the mol is masked in getting val or test results.
+
     :return: A dictionary mapping each metric in :code:`metrics` to a list of values for each task.
 
     """
@@ -133,23 +142,45 @@ def evaluate(model: MoleculeModel,
         gt_targets = None
         lt_targets = None
 
-    preds = predict(
-        model=model,
-        data_loader=data_loader,
-        scaler=scaler,
-        atom_bond_scaler=atom_bond_scaler,
-    )
+    if is_pretrain_and_with_MA:
+        preds, MA_test_label = predict(
+            model=model,
+            data_loader=data_loader,
+            scaler=scaler,
+            atom_bond_scaler=atom_bond_scaler,
+            is_pretrain_and_with_MA = is_pretrain_and_with_MA,
+            pretrain_mask_percent = pretrain_mask_percent
+        )
+        results = evaluate_predictions(
+            preds=preds,
+            targets=MA_test_label,
+            num_tasks=num_tasks,
+            metrics=metrics,
+            dataset_type=dataset_type,
+            is_atom_bond_targets=model.is_atom_bond_targets,
+            logger=logger,
+            gt_targets=gt_targets,
+            lt_targets=lt_targets,
+        )
 
-    results = evaluate_predictions(
-        preds=preds,
-        targets=data_loader.targets,
-        num_tasks=num_tasks,
-        metrics=metrics,
-        dataset_type=dataset_type,
-        is_atom_bond_targets=model.is_atom_bond_targets,
-        logger=logger,
-        gt_targets=gt_targets,
-        lt_targets=lt_targets,
-    )
+    else:
+        preds = predict(
+            model=model,
+            data_loader=data_loader,
+            scaler=scaler,
+            atom_bond_scaler=atom_bond_scaler,
+        )
+
+        results = evaluate_predictions(
+            preds=preds,
+            targets=data_loader.targets,
+            num_tasks=num_tasks,
+            metrics=metrics,
+            dataset_type=dataset_type,
+            is_atom_bond_targets=model.is_atom_bond_targets,
+            logger=logger,
+            gt_targets=gt_targets,
+            lt_targets=lt_targets,
+        )
 
     return results

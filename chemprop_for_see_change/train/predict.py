@@ -17,6 +17,8 @@ def predict(
     atom_bond_scaler: AtomBondScaler = None,
     return_unc_parameters: bool = False,
     dropout_prob: float = 0.0,
+    is_pretrain_and_with_MA: bool = False,
+    pretrain_mask_percent: float = 0.1
 ) -> List[List[float]]:
     """
     Makes predictions on a dataset using an ensemble of models.
@@ -28,6 +30,8 @@ def predict(
     :param atom_bond_scaler: A :class:`~chemprop.data.scaler.AtomBondScaler` fitted on the atomic/bond targets.
     :param return_unc_parameters: A bool indicating whether additional uncertainty parameters would be returned alongside the mean predictions.
     :param dropout_prob: For use during uncertainty prediction only. The propout probability used in generating a dropout ensemble.
+    :param is_pretrain_and_with_MA: A bool indicate whether it is pretrain mode or not, also only need to predict when MA task is involved otherwise no need.
+    :param pretrain_mask_percent: A float indicates how much percent of the mol is masked in getting val or test results.
     :return: A list of lists of predictions. The outer list is molecules while the inner list is tasks. If returning uncertainty parameters as well,
         it is a tuple of lists of lists, of a length depending on how many uncertainty parameters are appropriate for the loss function.
     """
@@ -103,10 +107,18 @@ def predict(
         else:
             bond_types_batch = None
 
+        if is_pretrain_and_with_MA:
+            MA_test = batch.batch_graph_pretrain_MA(pretrain_mask_percent)
+            MA_test_label = MA_test.masked_atom_label_list
+
+
+
+
         # Make predictions
-        with torch.no_grad():
+        if is_pretrain_and_with_MA:
+            MA_test_label_target = np.array(MA_test_label).reshape(-1, 1).tolist()
             batch_preds = model(
-                mol_batch,
+                MA_test,
                 features_batch,
                 atom_descriptors_batch,
                 atom_features_batch,
@@ -114,115 +126,133 @@ def predict(
                 bond_features_batch,
                 constraints_batch,
                 bond_types_batch,
+                True
             )
-
-        if model.is_atom_bond_targets:
-            batch_preds = [x.data.cpu().numpy() for x in batch_preds]
-            batch_vars, batch_lambdas, batch_alphas, batch_betas = [], [], [], []
-
-            for i, batch_pred in enumerate(batch_preds):
-                if model.loss_function == "mve":
-                    batch_pred, batch_var = np.split(batch_pred, 2, axis=1)
-                    batch_vars.append(batch_var)
-                elif model.loss_function == "dirichlet":
-                    if model.classification:
-                        batch_alpha = np.reshape(
-                            batch_pred,
-                            [batch_pred.shape[0], batch_pred.shape[1] // 2, 2],
-                        )
-                        batch_pred = batch_alpha[:, :, 1] / np.sum(
-                            batch_alpha, axis=2
-                        )  # shape(data, tasks, 2)
-                        batch_alphas.append(batch_alpha)
-                    elif model.multiclass:
-                        raise ValueError(
-                            f"In atomic/bond properties prediction, {model.multiclass} is not supported."
-                        )
-                elif model.loss_function == "evidential":  # regression
-                    batch_pred, batch_lambda, batch_alpha, batch_beta = np.split(
-                        batch_pred, 4, axis=1
-                    )
-                    batch_alphas.append(batch_alpha)
-                    batch_lambdas.append(batch_lambda)
-                    batch_betas.append(batch_beta)
-                batch_preds[i] = batch_pred
-
-            # Inverse scale for each atom/bond target if regression
-            if atom_bond_scaler is not None:
-                batch_preds = atom_bond_scaler.inverse_transform(batch_preds)
-                for i, stds in enumerate(atom_bond_scaler.stds):
-                    if model.loss_function == "mve":
-                        batch_vars[i] = batch_vars[i] * stds ** 2
-                    elif model.loss_function == "evidential":
-                        batch_betas[i] = batch_betas[i] * stds ** 2
-
-            # Collect vectors
-            preds.append(batch_preds)
-            if model.loss_function == "mve":
-                var.append(batch_vars)
-            elif model.loss_function == "dirichlet" and model.classification:
-                alphas.append(batch_alphas)
-            elif model.loss_function == "evidential":  # regression
-                lambdas.append(batch_lambdas)
-                alphas.append(batch_alphas)
-                betas.append(batch_betas)
-        else:
-            batch_preds = batch_preds.data.cpu().numpy()
-
-            if model.loss_function == "mve":
-                batch_preds, batch_var = np.split(batch_preds, 2, axis=1)
-            elif model.loss_function == "dirichlet":
-                if model.classification:
-                    batch_alphas = np.reshape(
-                        batch_preds,
-                        [batch_preds.shape[0], batch_preds.shape[1] // 2, 2],
-                    )
-                    batch_preds = batch_alphas[:, :, 1] / np.sum(
-                        batch_alphas, axis=2
-                    )  # shape(data, tasks, 2)
-                elif model.multiclass:
-                    batch_alphas = batch_preds
-                    batch_preds = batch_preds / np.sum(
-                        batch_alphas, axis=2, keepdims=True
-                    )  # shape(data, tasks, num_classes)
-            elif model.loss_function == "evidential":  # regression
-                batch_preds, batch_lambdas, batch_alphas, batch_betas = np.split(
-                    batch_preds, 4, axis=1
-                )
-
-            # Inverse scale if regression
-            if scaler is not None:
-                batch_preds = scaler.inverse_transform(batch_preds)
-                if model.loss_function == "mve":
-                    batch_var = batch_var * scaler.stds**2
-                elif model.loss_function == "evidential":
-                    batch_betas = batch_betas * scaler.stds**2
-
-            # Collect vectors
+            batch_preds = batch_preds.data.cpu().numpy() # n_sample, task==1, num_class =100
             batch_preds = batch_preds.tolist()
             preds.extend(batch_preds)
+
+            return preds, MA_test_label_target
+        else:
+            with torch.no_grad():
+                batch_preds = model(
+                    mol_batch,
+                    features_batch,
+                    atom_descriptors_batch,
+                    atom_features_batch,
+                    bond_descriptors_batch,
+                    bond_features_batch,
+                    constraints_batch,
+                    bond_types_batch,
+                )
+
+            if model.is_atom_bond_targets:
+                batch_preds = [x.data.cpu().numpy() for x in batch_preds]
+                batch_vars, batch_lambdas, batch_alphas, batch_betas = [], [], [], []
+
+                for i, batch_pred in enumerate(batch_preds):
+                    if model.loss_function == "mve":
+                        batch_pred, batch_var = np.split(batch_pred, 2, axis=1)
+                        batch_vars.append(batch_var)
+                    elif model.loss_function == "dirichlet":
+                        if model.classification:
+                            batch_alpha = np.reshape(
+                                batch_pred,
+                                [batch_pred.shape[0], batch_pred.shape[1] // 2, 2],
+                            )
+                            batch_pred = batch_alpha[:, :, 1] / np.sum(
+                                batch_alpha, axis=2
+                            )  # shape(data, tasks, 2)
+                            batch_alphas.append(batch_alpha)
+                        elif model.multiclass:
+                            raise ValueError(
+                                f"In atomic/bond properties prediction, {model.multiclass} is not supported."
+                            )
+                    elif model.loss_function == "evidential":  # regression
+                        batch_pred, batch_lambda, batch_alpha, batch_beta = np.split(
+                            batch_pred, 4, axis=1
+                        )
+                        batch_alphas.append(batch_alpha)
+                        batch_lambdas.append(batch_lambda)
+                        batch_betas.append(batch_beta)
+                    batch_preds[i] = batch_pred
+
+                # Inverse scale for each atom/bond target if regression
+                if atom_bond_scaler is not None:
+                    batch_preds = atom_bond_scaler.inverse_transform(batch_preds)
+                    for i, stds in enumerate(atom_bond_scaler.stds):
+                        if model.loss_function == "mve":
+                            batch_vars[i] = batch_vars[i] * stds ** 2
+                        elif model.loss_function == "evidential":
+                            batch_betas[i] = batch_betas[i] * stds ** 2
+
+                # Collect vectors
+                preds.append(batch_preds)
+                if model.loss_function == "mve":
+                    var.append(batch_vars)
+                elif model.loss_function == "dirichlet" and model.classification:
+                    alphas.append(batch_alphas)
+                elif model.loss_function == "evidential":  # regression
+                    lambdas.append(batch_lambdas)
+                    alphas.append(batch_alphas)
+                    betas.append(batch_betas)
+            else:
+                batch_preds = batch_preds.data.cpu().numpy()
+
+                if model.loss_function == "mve":
+                    batch_preds, batch_var = np.split(batch_preds, 2, axis=1)
+                elif model.loss_function == "dirichlet":
+                    if model.classification:
+                        batch_alphas = np.reshape(
+                            batch_preds,
+                            [batch_preds.shape[0], batch_preds.shape[1] // 2, 2],
+                        )
+                        batch_preds = batch_alphas[:, :, 1] / np.sum(
+                            batch_alphas, axis=2
+                        )  # shape(data, tasks, 2)
+                    elif model.multiclass:
+                        batch_alphas = batch_preds
+                        batch_preds = batch_preds / np.sum(
+                            batch_alphas, axis=2, keepdims=True
+                        )  # shape(data, tasks, num_classes)
+                elif model.loss_function == "evidential":  # regression
+                    batch_preds, batch_lambdas, batch_alphas, batch_betas = np.split(
+                        batch_preds, 4, axis=1
+                    )
+
+                # Inverse scale if regression
+                if scaler is not None:
+                    batch_preds = scaler.inverse_transform(batch_preds)
+                    if model.loss_function == "mve":
+                        batch_var = batch_var * scaler.stds**2
+                    elif model.loss_function == "evidential":
+                        batch_betas = batch_betas * scaler.stds**2
+
+                # Collect vectors
+                batch_preds = batch_preds.tolist()
+                preds.extend(batch_preds)
+                if model.loss_function == "mve":
+                    var.extend(batch_var.tolist())
+                elif model.loss_function == "dirichlet" and model.classification:
+                    alphas.extend(batch_alphas.tolist())
+                elif model.loss_function == "evidential":  # regression
+                    lambdas.extend(batch_lambdas.tolist())
+                    alphas.extend(batch_alphas.tolist())
+                    betas.extend(batch_betas.tolist())
+
+        if model.is_atom_bond_targets:
+            preds = [np.concatenate(x) for x in zip(*preds)]
+            var = [np.concatenate(x) for x in zip(*var)]
+            alphas = [np.concatenate(x) for x in zip(*alphas)]
+            betas = [np.concatenate(x) for x in zip(*betas)]
+            lambdas = [np.concatenate(x) for x in zip(*lambdas)]
+
+        if return_unc_parameters:
             if model.loss_function == "mve":
-                var.extend(batch_var.tolist())
-            elif model.loss_function == "dirichlet" and model.classification:
-                alphas.extend(batch_alphas.tolist())
-            elif model.loss_function == "evidential":  # regression
-                lambdas.extend(batch_lambdas.tolist())
-                alphas.extend(batch_alphas.tolist())
-                betas.extend(batch_betas.tolist())
+                return preds, var
+            elif model.loss_function == "dirichlet":
+                return preds, alphas
+            elif model.loss_function == "evidential":
+                return preds, lambdas, alphas, betas
 
-    if model.is_atom_bond_targets:
-        preds = [np.concatenate(x) for x in zip(*preds)]
-        var = [np.concatenate(x) for x in zip(*var)]
-        alphas = [np.concatenate(x) for x in zip(*alphas)]
-        betas = [np.concatenate(x) for x in zip(*betas)]
-        lambdas = [np.concatenate(x) for x in zip(*lambdas)]
-
-    if return_unc_parameters:
-        if model.loss_function == "mve":
-            return preds, var
-        elif model.loss_function == "dirichlet":
-            return preds, alphas
-        elif model.loss_function == "evidential":
-            return preds, lambdas, alphas, betas
-
-    return preds
+        return preds

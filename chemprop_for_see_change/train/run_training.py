@@ -196,6 +196,12 @@ def run_training(args: TrainArgs,
 
     # Get loss function
     loss_func = get_loss_func(args)
+    if args.is_pretrain:
+        loss_func_MA = get_loss_func(args)[0]
+
+        loss_func_contra = get_loss_func(args)[1]
+
+        loss_func_Triplet = get_loss_func(args)[2]
 
     # Set up test set evaluation
     test_smiles, test_targets = test_data.smiles(), test_data.targets()
@@ -292,50 +298,107 @@ def run_training(args: TrainArgs,
         best_epoch, n_iter = 0, 0
         for epoch in trange(args.epochs):
             debug(f'Epoch {epoch}')
-            n_iter = train(
-                model=model,
-                data_loader=train_data_loader,
-                loss_func=loss_func,
-                optimizer=optimizer,
-                scheduler=scheduler,
-                args=args,
-                n_iter=n_iter,
-                atom_bond_scaler=atom_bond_scaler,
-                logger=logger,
-                writer=writer
-            )
-            if isinstance(scheduler, ExponentialLR):
-                scheduler.step()
-            val_scores = evaluate(
-                model=model,
-                data_loader=val_data_loader,
-                num_tasks=args.num_tasks,
-                metrics=args.metrics,
-                dataset_type=args.dataset_type,
-                scaler=scaler,
-                atom_bond_scaler=atom_bond_scaler,
-                logger=logger
-            )
+            if args.is_pretrain:
+                n_iter = train(
+                    model=model,
+                    data_loader=train_data_loader,
+                    loss_func=loss_func,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    args=args,
+                    n_iter=n_iter,
+                    atom_bond_scaler=atom_bond_scaler,
+                    logger=logger,
+                    writer=writer,
+                    loss_func_contra=loss_func_contra,
+                    loss_func_MA=loss_func_MA,
+                    loss_func_Triplet=loss_func_Triplet)
+                if isinstance(scheduler, ExponentialLR):
+                    scheduler.step()
+                if args.pretrain_with_val:
+                    # Normally won't use as big pretraining data will not normally not overfit
+                    # This evaluation may make the model towards the MA task, maybe bad
+                    # If need contrastive learning be considered as well, will need to change a lot of the evaluate function
+                    val_scores = evaluate(
+                        model=model,
+                        data_loader=val_data_loader,
+                        num_tasks=args.num_tasks,
+                        metrics=args.metrics,
+                        dataset_type=args.dataset_type,
+                        scaler=scaler,
+                        atom_bond_scaler=atom_bond_scaler,
+                        logger=logger,
+                        is_pretrain_and_with_MA=True,
+                        pretrain_mask_percent=0.1
+                    )
+                    for metric, scores in val_scores.items():
+                        # Average validation score\
+                        mean_val_score = multitask_mean(scores, metric=metric)
+                        debug(f'Validation {metric} = {mean_val_score:.6f}')
+                        writer.add_scalar(f'validation_{metric}', mean_val_score, n_iter)
 
-            for metric, scores in val_scores.items():
-                # Average validation score\
-                mean_val_score = multitask_mean(scores, metric=metric)
-                debug(f'Validation {metric} = {mean_val_score:.6f}')
-                writer.add_scalar(f'validation_{metric}', mean_val_score, n_iter)
+                        if args.show_individual_scores:
+                            # Individual validation scores
+                            for task_name, val_score in zip(args.task_names, scores):
+                                debug(f'Validation {task_name} {metric} = {val_score:.6f}')
+                                writer.add_scalar(f'validation_{task_name}_{metric}', val_score, n_iter)
+                        # Save model checkpoint if improved validation score
+                        mean_val_score = multitask_mean(val_scores[args.metric], metric=args.metric)
+                        if args.minimize_score and mean_val_score < best_score or \
+                                not args.minimize_score and mean_val_score > best_score:
+                            best_score, best_epoch = mean_val_score, epoch
+                            save_checkpoint(os.path.join(save_dir, MODEL_FILE_NAME), model, scaler, features_scaler,
+                                            atom_descriptor_scaler, bond_descriptor_scaler, atom_bond_scaler, args)
+                else:
+                    if epoch // args.pretrain_save_per_epoch == 0:
+                        save_checkpoint(os.path.join(save_dir, MODEL_FILE_NAME), model, scaler, features_scaler,
+                                        atom_descriptor_scaler, bond_descriptor_scaler, atom_bond_scaler, args)
 
-                if args.show_individual_scores:
-                    # Individual validation scores
-                    for task_name, val_score in zip(args.task_names, scores):
-                        debug(f'Validation {task_name} {metric} = {val_score:.6f}')
-                        writer.add_scalar(f'validation_{task_name}_{metric}', val_score, n_iter)
+            else:
+                n_iter = train(
+                    model=model,
+                    data_loader=train_data_loader,
+                    loss_func=loss_func,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    args=args,
+                    n_iter=n_iter,
+                    atom_bond_scaler=atom_bond_scaler,
+                    logger=logger,
+                    writer=writer
+                )
+                if isinstance(scheduler, ExponentialLR):
+                    scheduler.step()
+                val_scores = evaluate(
+                    model=model,
+                    data_loader=val_data_loader,
+                    num_tasks=args.num_tasks,
+                    metrics=args.metrics,
+                    dataset_type=args.dataset_type,
+                    scaler=scaler,
+                    atom_bond_scaler=atom_bond_scaler,
+                    logger=logger
+                )
 
-            # Save model checkpoint if improved validation score
-            mean_val_score = multitask_mean(val_scores[args.metric], metric=args.metric)
-            if args.minimize_score and mean_val_score < best_score or \
-                    not args.minimize_score and mean_val_score > best_score:
-                best_score, best_epoch = mean_val_score, epoch
-                save_checkpoint(os.path.join(save_dir, MODEL_FILE_NAME), model, scaler, features_scaler,
-                                atom_descriptor_scaler, bond_descriptor_scaler, atom_bond_scaler, args)
+                for metric, scores in val_scores.items():
+                    # Average validation score\
+                    mean_val_score = multitask_mean(scores, metric=metric)
+                    debug(f'Validation {metric} = {mean_val_score:.6f}')
+                    writer.add_scalar(f'validation_{metric}', mean_val_score, n_iter)
+
+                    if args.show_individual_scores:
+                        # Individual validation scores
+                        for task_name, val_score in zip(args.task_names, scores):
+                            debug(f'Validation {task_name} {metric} = {val_score:.6f}')
+                            writer.add_scalar(f'validation_{task_name}_{metric}', val_score, n_iter)
+
+                # Save model checkpoint if improved validation score
+                mean_val_score = multitask_mean(val_scores[args.metric], metric=args.metric)
+                if args.minimize_score and mean_val_score < best_score or \
+                        not args.minimize_score and mean_val_score > best_score:
+                    best_score, best_epoch = mean_val_score, epoch
+                    save_checkpoint(os.path.join(save_dir, MODEL_FILE_NAME), model, scaler, features_scaler,
+                                    atom_descriptor_scaler, bond_descriptor_scaler, atom_bond_scaler, args)
 
         # Evaluate on test set using model with best validation score
         info(f'Model {model_idx} best validation {args.metric} = {best_score:.6f} on epoch {best_epoch}')

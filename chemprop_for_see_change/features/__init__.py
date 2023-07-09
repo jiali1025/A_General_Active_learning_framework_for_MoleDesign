@@ -5,6 +5,7 @@ from .featurization import atom_features, bond_features, BatchMolGraph, get_atom
     MolGraph, onek_encoding_unk, set_extra_atom_fdim, set_extra_bond_fdim, set_reaction, set_explicit_h, \
     set_adding_hs, set_keeping_atom_map, is_reaction, is_explicit_h, is_adding_hs, is_keeping_atom_map, is_mol, reset_featurization_parameters
 from .utils import load_features, save_features, load_valid_atom_or_bond_features
+from .featurization_pretrain import MolGraphPretrain, BatchMolGraphPretrain
 
 __all__ = [
     'get_available_features_generators',
@@ -35,5 +36,7 @@ __all__ = [
     'load_features',
     'save_features',
     'load_valid_atom_or_bond_features',
-    'reset_featurization_parameters'
+    'reset_featurization_parameters',
+    'MolGraphPretrain',
+    'BatchMolGraphPretrain'
 ]

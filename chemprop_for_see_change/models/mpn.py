@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 from chemprop.args import TrainArgs
-from chemprop.features import BatchMolGraph, get_atom_fdim, get_bond_fdim, mol2graph
+from chemprop.features import BatchMolGraph, get_atom_fdim, get_bond_fdim, mol2graph, BatchMolGraphPretrain
 from chemprop.nn_utils import index_select_ND, get_activation_function
 
 
@@ -15,7 +15,7 @@ class MPNEncoder(nn.Module):
     """An :class:`MPNEncoder` is a message passing neural network for encoding a molecule."""
 
     def __init__(self, args: TrainArgs, atom_fdim: int, bond_fdim: int, hidden_size: int = None,
-                 bias: bool = None, depth: int = None):
+                 bias: bool = None, depth: int = None, is_MA_pretrain: bool = None):
         """
         :param args: A :class:`~chemprop.args.TrainArgs` object containing model arguments.
         :param atom_fdim: Atom feature vector dimension.
@@ -37,6 +37,7 @@ class MPNEncoder(nn.Module):
         self.aggregation = args.aggregation
         self.aggregation_norm = args.aggregation_norm
         self.is_atom_bond_targets = args.is_atom_bond_targets
+
 
         # Dropout
         self.dropout = nn.Dropout(args.dropout)
@@ -74,9 +75,10 @@ class MPNEncoder(nn.Module):
                                                     self.hidden_size + self.bond_descriptors_size,)
 
     def forward(self,
-                mol_graph: BatchMolGraph,
+                mol_graph: Union[BatchMolGraph,BatchMolGraphPretrain],
                 atom_descriptors_batch: List[np.ndarray] = None,
-                bond_descriptors_batch: List[np.ndarray] = None) -> torch.Tensor:
+                bond_descriptors_batch: List[np.ndarray] = None,
+                is_MA_pretrain: bool = False) -> torch.Tensor:
         """
         Encodes a batch of molecular graphs.
 
@@ -84,6 +86,7 @@ class MPNEncoder(nn.Module):
                           a batch of molecular graphs.
         :param atom_descriptors_batch: A list of numpy arrays containing additional atomic descriptors.
         :param bond_descriptors_batch: A list of numpy arrays containing additional bond descriptors
+        :param is_MA_pretrain: A boolean indicates whether the mask atom prediction information is needed to be retrived.
         :return: A PyTorch tensor of shape :code:`(num_molecules, hidden_size)` containing the encoding of each molecule.
         """
         if atom_descriptors_batch is not None:
@@ -91,7 +94,9 @@ class MPNEncoder(nn.Module):
             atom_descriptors_batch = torch.from_numpy(np.concatenate(atom_descriptors_batch, axis=0)).float().to(self.device)
 
         f_atoms, f_bonds, a2b, b2a, b2revb, a_scope, b_scope = mol_graph.get_components(atom_messages=self.atom_messages)
+
         f_atoms, f_bonds, a2b, b2a, b2revb = f_atoms.to(self.device), f_bonds.to(self.device), a2b.to(self.device), b2a.to(self.device), b2revb.to(self.device)
+
 
         if self.is_atom_bond_targets:
             b2br = mol_graph.get_b2br().to(self.device)
@@ -174,6 +179,14 @@ class MPNEncoder(nn.Module):
         if self.is_atom_bond_targets:
             return atom_hiddens, a_scope, bond_hiddens, b_scope, b2br  # num_atoms x hidden, remove the first one which is zero padding
 
+        # Readout for mask atom pretraining
+        if is_MA_pretrain:
+            mask_atom_index = torch.tensor(mol_graph.final_masked_atom_index)
+            mask_atom_index = mask_atom_index.to(self.device)
+            mask_atom_hiddens = torch.index_select(atom_hiddens ,0, mask_atom_index).float()
+
+            return mask_atom_hiddens # num_mask_atoms x hidden
+
         mol_vecs = []
         for i, (a_start, a_size) in enumerate(a_scope):
             if a_size == 0:
@@ -245,12 +258,13 @@ class MPN(nn.Module):
                                               args.hidden_size_solvent, args.bias_solvent, args.depth_solvent)
 
     def forward(self,
-                batch: Union[List[List[str]], List[List[Chem.Mol]], List[List[Tuple[Chem.Mol, Chem.Mol]]], List[BatchMolGraph]],
+                batch: Union[List[List[str]], List[List[Chem.Mol]], List[List[Tuple[Chem.Mol, Chem.Mol]]], List[BatchMolGraph], List[BatchMolGraphPretrain]],
                 features_batch: List[np.ndarray] = None,
                 atom_descriptors_batch: List[np.ndarray] = None,
                 atom_features_batch: List[np.ndarray] = None,
                 bond_descriptors_batch: List[np.ndarray] = None,
-                bond_features_batch: List[np.ndarray] = None) -> torch.Tensor:
+                bond_features_batch: List[np.ndarray] = None,
+                is_MA_pretrain: bool = False) -> torch.Tensor:
         """
         Encodes a batch of molecules.
 
@@ -263,9 +277,10 @@ class MPN(nn.Module):
         :param atom_features_batch: A list of numpy arrays containing additional atom features.
         :param bond_descriptors_batch: A list of numpy arrays containing additional bond descriptors.
         :param bond_features_batch: A list of numpy arrays containing additional bond features.
+        :param is_MA_pretrain: A boolean indicates whether the mask atom prediction information is needed to be retrived.
         :return: A PyTorch tensor of shape :code:`(num_molecules, hidden_size)` containing the encoding of each molecule.
         """
-        if type(batch[0]) != BatchMolGraph:
+        if type(batch[0]) != BatchMolGraph and type(batch[0]) != BatchMolGraphPretrain:
             # Group first molecules, second molecules, etc for mol2graph
             batch = [[mols[i] for mols in batch] for i in range(len(batch[0]))]
 
@@ -313,10 +328,10 @@ class MPN(nn.Module):
                 raise NotImplementedError('Atom descriptors are currently only supported with one molecule '
                                           'per input (i.e., number_of_molecules = 1).')
 
-            encodings = [enc(ba, atom_descriptors_batch, bond_descriptors_batch) for enc, ba in zip(self.encoder, batch)]
+            encodings = [enc(ba, atom_descriptors_batch, bond_descriptors_batch,is_MA_pretrain=is_MA_pretrain) for enc, ba in zip(self.encoder, batch)]
         else:
             if not self.reaction_solvent:
-                encodings = [enc(ba) for enc, ba in zip(self.encoder, batch)]
+                encodings = [enc(ba,is_MA_pretrain=is_MA_pretrain) for enc, ba in zip(self.encoder, batch)]
             else:
                 encodings = []
                 for ba in batch:
@@ -328,6 +343,9 @@ class MPN(nn.Module):
         output = encodings[0] if len(encodings) == 1 else torch.cat(encodings, dim=1)
 
         if self.use_input_features:
+            '''
+            I think this can not be used for pretraining as information will be given back again
+            '''
             if len(features_batch.shape) == 1:
                 features_batch = features_batch.view(1, -1)
 

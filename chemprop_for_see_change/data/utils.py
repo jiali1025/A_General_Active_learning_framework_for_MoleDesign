@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from .data import MoleculeDatapoint, MoleculeDataset, make_mols
+from .data_pretrain import MoleculeDatapoint, MoleculeDataset, make_mols
 from .scaffold import log_scaffold_stats, scaffold_split
 from chemprop.args import PredictArgs, TrainArgs
 from chemprop.features import load_features, load_valid_atom_or_bond_features, is_mol
@@ -344,7 +344,7 @@ def get_data(path: str,
              smiles_columns: Union[str, List[str]] = None,
              target_columns: List[str] = None,
              ignore_columns: List[str] = None,
-             skip_invalid_smiles: bool = True,
+             skip_invalid_smiles: bool = False,
              args: Union[TrainArgs, PredictArgs] = None,
              data_weights_path: str = None,
              features_path: List[str] = None,
@@ -357,7 +357,7 @@ def get_data(path: str,
              store_row: bool = False,
              logger: Logger = None,
              loss_function: str = None,
-             skip_none_targets: bool = False) -> MoleculeDataset:
+             skip_none_targets: bool = False,) -> MoleculeDataset:
     """
     Gets SMILES and target values from a CSV file.
 
@@ -589,7 +589,10 @@ def get_data(path: str,
                 constraints=all_constraints_data[i] if constraints_data is not None else None,
                 raw_constraints=all_raw_constraints_data[i] if raw_constraints_data is not None else None,
                 overwrite_default_atom_features=args.overwrite_default_atom_features if args is not None else False,
-                overwrite_default_bond_features=args.overwrite_default_bond_features if args is not None else False
+                overwrite_default_bond_features=args.overwrite_default_bond_features if args is not None else False,
+                mask_atom_pre_auto=args.mask_atom_pre_auto if args is not None else False,
+                mask_bond_pre_auto=args.mask_bond_pre_auto if args is not None else False,
+                is_pretrain = args.is_pretrain if args is not None else False,
             ) for i, (smiles, targets) in tqdm(enumerate(zip(all_smiles, all_targets)),
                                             total=len(all_smiles))
         ])
