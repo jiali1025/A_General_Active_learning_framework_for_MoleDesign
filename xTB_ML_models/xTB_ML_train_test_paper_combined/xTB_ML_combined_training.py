@@ -49,16 +49,16 @@ def train_ML():
 
 
 def gen_test_data(testType):
-    if os.path.isfile('xTB_' + testType + '.csv'):
-        os.system('cp xTB_' + testType + '.csv ' + testType + '_xTB.csv')
-    if not os.path.isdir('data'):
-        os.mkdir('data')
-    os.system('mv xTB_' + testType + '.csv data')
+    # if os.path.isfile('xTB_' + testType + '.csv'):
+    #     os.system('cp xTB_' + testType + '.csv ' + testType + '_xTB.csv')
+    # if not os.path.isdir('data'):
+    #     os.mkdir('data')
+    # os.system('mv xTB_' + testType + '.csv data')
     with open(testType + '_xTB.csv', 'r') as file:
         dataXTB = pd.read_csv(file)
     dataXTB.rename({'xtbT1': 'xtb_T1', 'xtbS1': 'xtb_S1'}, axis='columns', inplace=True)
     dataXTB.to_csv(testType + '_SMILES.csv', columns=['SMILES'], index=False)
-    dataXTB.to_csv(testType + '_features.csv', columns=['xtb_T1', 'xtb_S1'], index=False)
+    dataXTB.to_csv(testType + '_features.csv', columns=['xtb_S1', 'xtb_T1'], index=False)
 
 
 def predict_ML(testType):
@@ -148,9 +148,9 @@ def evaluate_predictions(testType):
 
 # gen_train_data()
 # train_ML()
-# gen_test_data('Photosensitizers_DA')
-# predict_ML('Photosensitizers_DA')
-# gen_test_data('Photosensitizers_DAD')
-# predict_ML('Photosensitizers_DAD')
+gen_test_data('Photosensitizers_DA')
+predict_ML('Photosensitizers_DA')
+gen_test_data('Photosensitizers_DAD')
+predict_ML('Photosensitizers_DAD')
 evaluate_predictions('Photosensitizers_DA')
 evaluate_predictions('Photosensitizers_DAD')
