@@ -1,4 +1,0 @@
-Task,Mean rmse,Standard deviation rmse,Fold 0 rmse,Fold 1 rmse,Fold 2 rmse,Fold 3 rmse,Fold 4 rmse,Fold 5 rmse,Fold 6 rmse,Fold 7 rmse,Fold 8 rmse,Fold 9 rmse
-TDDFT_S1,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan
-TDDFT_T1,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan
-TDDFT_S1_T1,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan,nan
