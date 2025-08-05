@@ -160,20 +160,6 @@ Experimental results including:
 
 See `notebooks/` for detailed analysis and visualization.
 
-## Citation
-
-If you use this framework in your research, please cite:
-
-```bibtex
-@article{unified_active_learning_2024,
-  title={A Unified Active Learning Framework for Molecular Design},
-  author={[Your Name]},
-  journal={[Journal Name]},
-  year={2024},
-  note={[DOI to be assigned]}
-}
-```
-
 ## Contributing
 
 We welcome contributions! Please see `CONTRIBUTING.md` for guidelines.
@@ -187,9 +173,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ChemProp for molecular property prediction
 - RDKit for molecular manipulation
 - Active learning community for methodological insights
-
-## Contact
-
-- **Author**: [Your Name]
-- **Email**: [Your Email] 
-- **GitHub**: [@jiali1025](https://github.com/jiali1025)
