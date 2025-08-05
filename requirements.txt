@@ -1,0 +1,43 @@
+# Core dependencies for Unified Active Learning Framework
+# Based on tested chemprop environment (fixed versions for stability)
+
+# Chemical computation and molecular analysis
+rdkit==2023.9.2
+chemprop==1.5.2
+
+# Deep learning framework (required by chemprop)
+torch==1.13.1
+# torchvision==0.17.2  # Optional, uncomment if needed
+
+# Scientific computing and data analysis
+numpy==1.24.3
+pandas==2.0.3
+scipy==1.10.1
+
+# Machine learning
+scikit-learn==1.2.1
+
+# Visualization and plotting
+matplotlib==3.7.2
+seaborn==0.13.1
+umap-learn==0.5.3
+
+# Utility packages
+tqdm==4.65.0
+packaging==23.1
+typing-extensions==4.5.0
+
+# Command line argument parsing (used by chemprop)
+typed-argument-parser==1.8.0
+
+# Additional dependencies from your environment
+hyperopt==0.2.7
+descriptastorus==2.5.0.20
+
+# Optional dependencies for enhanced functionality
+# jupyter==1.0.0  # For notebooks - install separately if needed
+# tensorboardx==2.6  # For model logging - already in your env
+# plotly>=5.0.0  # For interactive plots - install if needed
+
+# Note: This requirements.txt is based on your working chemprop environment
+# These exact versions are tested and known to work with your code
