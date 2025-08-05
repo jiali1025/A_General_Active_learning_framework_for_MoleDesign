@@ -88,15 +88,9 @@ pip install -r requirements.txt
 ### 📥 Download Data and Models
 
 ```bash
-# Download datasets (Google Drive public folder)
+# Download datasets and models (Google Drive public folder)
 gdown --folder https://drive.google.com/drive/folders/1LG8ly9VcvSZcGj9lQ6Z-wVzkhSarclat
 
-# Download models (replace FOLDER_ID with your Google Drive models folder ID)
-gdown --folder https://drive.google.com/drive/folders/FOLDER_ID
-
-# Or use the provided download scripts
-bash scripts/download_models.sh   # Linux / macOS
-./scripts/download_models.ps1      # Windows PowerShell
 ```
 
 ## 🎯 Quick Start
